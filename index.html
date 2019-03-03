@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='utf-8' />
+    <title>Ward Stars</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.53.1/mapbox-gl.js'></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.53.1/mapbox-gl.css' rel='stylesheet' />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        audio {
+            position: fixed;
+            left: calc(50% - 60px);
+            bottom: 40%;
+            margin: auto;
+            width: 120px;
+            transition: all 0.5s ease-in-out;
+        }
+
+        audio.playing {
+            width: 200px;
+            left: 8px;
+            bottom: 28px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id='map'></div>
+    <audio controls>
+        <source src="allstar.mp3" type="audio/mpeg">
+    </audio>
+    <script>
+        var audioEl = document.querySelector('audio');
+        mapboxgl.accessToken = 'pk.eyJ1IjoicGpzaWVyIiwiYSI6IjJNaFFhUTgifQ.PPa4hKpIgxQ-8lNDbhu-xA';
+
+        // Use a minimal variant of the Mapbox Dark style, with certain features removed.
+        var map = new mapboxgl.Map({
+            style: 'mapbox://styles/examples/cj68bstx01a3r2rndlud0pwpv',
+            center: {
+                lng: -87.62825,
+                lat: 41.87627
+            },
+            zoom: 10,
+            pitch: 55,
+            container: 'map'
+        });
+
+        map.addControl(new mapboxgl.FullscreenControl());
+
+        map.on('load', function () {
+            map.addSource('ward-stars', {
+                type: 'geojson',
+                data: 'ward-all-stars.geojson'
+            });
+
+            map.addLayer({
+                id: 'ward-stars',
+                source: 'ward-stars',
+                type: 'fill-extrusion',
+                filter: ['>', 'pct', 50],
+                paint: {
+                    'fill-extrusion-color': '#ffffff',
+                    'fill-extrusion-height-transition': {
+                        duration: 0,
+                        delay: 0,
+                    },
+                    'fill-extrusion-opacity': 0.6,
+                }
+            });
+
+            map.addLayer({
+                id: 'ward-stars-runoff',
+                source: 'ward-stars',
+                type: 'fill-extrusion',
+                filter: ['<', 'pct', 50],
+                paint: {
+                    'fill-extrusion-color': '#ffffff',
+                    'fill-extrusion-height-transition': {
+                        duration: 0,
+                        delay: 0,
+                    },
+                    'fill-extrusion-opacity': 0.6,
+                }
+            });
+
+            var analyser;
+            var dataArray = new Uint8Array(6);
+
+            function draw(now) {
+                analyser.getByteFrequencyData(dataArray);
+                var winnerAvg = (dataArray[0] + dataArray[1] + dataArray[2]) / 2;
+                var runoffAvg = (dataArray[3] + dataArray[4] + dataArray[5]) / 2;
+                map.setPaintProperty(
+                    'ward-stars', 'fill-extrusion-height',
+                    ['*', ['get', 'pct'], winnerAvg]
+                );
+                map.setPaintProperty(
+                    'ward-stars-runoff', 'fill-extrusion-height',
+                    ['*', ['get', 'pct'], runoffAvg]
+                );
+
+                // Animate the map bearing and light color over time, and make the light more
+                // intense when the audio is louder.
+                var avg = (winnerAvg + runoffAvg) / 2;
+                map.setBearing(now / 500);
+                map.setLight({
+                    color: "hsl(" + now / 100 % 360 + "," + Math.min(50 + avg / 4, 100) + "%,50%)",
+                    intensity: Math.min(1, avg / 256 * 10)
+                });
+
+                requestAnimationFrame(draw);
+            }
+
+            audioEl.addEventListener('play', function () {
+                audioEl.classList.add('playing');
+                var AudioContext = window.AudioContext || window.webkitAudioContext;
+                var audioCtx = new AudioContext();
+
+                var source = audioCtx.createMediaElementSource(audioEl);
+
+                analyser = audioCtx.createAnalyser();
+                analyser.smoothingTimeConstant = 0.8;
+
+                source.connect(analyser);
+                analyser.connect(audioCtx.destination);
+
+                requestAnimationFrame(draw);
+            });            
+        });
+    </script>
+
+</body>
+
+</html>
